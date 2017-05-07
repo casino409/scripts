@@ -1,0 +1,413 @@
+! В края на файла май има копие, трябва изцяло да се прегледа
+
+ https://ffmpeg.org/faq.html - внимателно чети и много ще намериш
+
+ x264 for windows (mkv има, но не пише колко време, кадри остават, само колко е кодирано)
+ http://download.videolan.org/x264/binaries/win64/
+ 
+ Ctrl+S  - пауза, след това може просто пробел и продължава
+ 
+Всичко натъпкано на едно:
+ x264 --level 4.1 --profile high --preset slow --vf resize:width=1280,height=100,fittobox=width,method=lanczos IN.mp4 -o OUT.mkv
+ 
+Правене на филм от картинки:
+ x264 --level 4.1 --profile high -o out.mp4 "%06d.png" --fsp 24
+ x264 --level 4.1 --profile high -o out.mp4 "%06d.png" --fsp 24 --vf resize:1280,720
+ 
+ ffmpeg -r 24 -i "IMG_%04d.tif" -pix_fmt yuv420p -c:v libx264 -preset slow -level 4.1 out.mkv
+ ffmpeg -r 24 -i "IMG_%04d.tif" -pix_fmt yuv420p -vf scale=1280:720 -c:v libx264 -preset slow -level 4.1 out.mkv
+
+ Определяне на името на първия файл и ограничение на число на кадри
+ ffmpeg -start_number 1 -i test_%d.jpg -vframes 100 -vcodec mpeg4 test.avi
+ 
+ ffmpeg -f concat -r 24 -i list.txt -pix_fmt yuv420p -c:v libx264 -preset slow -level 4.1 out.mkv
+ list.txt
+    # comment
+    file '100_%04d.tif'
+    file '101_%04d.tif'
+    file /path/to/file1
+    file /path/to/file2
+
+ нумерация на кадри (виж още в края)	
+ ffmpeg -f concat -r 24 -i img/list.txt -pix_fmt yuv420p -vf "drawtext=fontfile=Arial.ttf: text=%{n}: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000099" -c:v libx264 -preset medium -level 4.1 out.mkv	
+ 
+ филм с тишина като звук:
+ ffmpeg -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=44100 -r 24 -start_number 1 -i "IMG_%04d.tif" -shortest -pix_fmt yuv420p -vf scale=1280:720 -c:v libx264 -preset slow -level 4.1 -c:a aac out.mkv
+ 
+ ffmpeg -f lavfi -i anullsrc -i video.mov -shortest -c:v copy -c:a aac -map 0:a -map 1:v out.mkv
+
+ Преглед на живо какво ще стане:
+ ffmpeg -r 24 -i "IMG_%04d.tif" -pix_fmt yuv420p -vcodec rawvideo -f matroska -vf scale=1280:-720 - | ffplay -
+
+ това ще направи картинки от видеото
+ ffmpeg -i video.avi "img_series_%04d.png" 
+
+ x264 + aac + deinterlacing
+ ffmpeg -i in.mp4 -c:v libx264 -profile:v high -preset:v veryslow -level 4.1 -x264opts crf=18 -vf "yadif" -c:a libvo_aacenc -ab 160k out.mkv
+
+ x264 + aac
+ ffmpeg -i in.mp4 -c:v libx264 -profile:v high -preset:v veryslow -level 4.1 -x264opts crf=18 -c:a libvo_aacenc -ab 160k out.mkv
+ 
+FFMPEG doc 
+As a general rule, options are applied to the next specified file. 
+Therefore, order is important, and you can have the same option on the command 
+line multiple times. Each occurrence is then applied to the next input or 
+output file.
+ 
+Ако трябва нещо да се тестира да не чакаш дълго: (кодира 200 кадъра след като пропусне първите 300)
+ x264 --frames 200 --level 4.1 --profile high --preset fast --seek 300
+Или (първите 10 секунди)
+ ffmpeg -t 10 ...
+
+Слагане на картинка вместо да показва случаен кадър
+ mkvmerge.exe "in.mkv" --attachment-name Cover --attach-file "Poster.jpg" -o "out.mkv"
+
+Пропускане (превъртане)
+ ffmpeg --ss 5 -i in.mp4 out.mp4 // crop 5 sec
+ ffmpeg -itsoffset 5 -i in1.mp4 -i in2.mp4 -codec copy out.mkv // delay in1 for 5 sec
+ ffmpeg -itsoffset 00:00:05.000 -i in1.mp4 -i in2.mp4 -codec copy out.mkv
+! --ss е важно къде се слага, като стои преди -i става (бързо) превъртане до нужното място,
+  ако стои след все едно всички кадри отиват на кодека, но се пропускат докато не дойде 
+  нужното време. 
+! --ss ако стои преди -t ще означава дължината на исходния файл, ако --ss стои след, 
+  -t ще означава момент на време във входния файл.
+ 
+Мащабиране на видео: (x264)
+ Има различни варианти:
+ а) трябва се впише в дадения размер
+ x264 ... --vf resize:width=720,height=500,fittobox=both,method=lanczos
+ б) трябва ти определена ширина (с височината е ясно)
+ ! пишеш ширина и височина, просто едното ще бъде игнорирано
+ x264 ... --vf resize:width=720,height=500,fittobox=width,method=lanczos
+
+Мащабиране на видео: (ffmpeg)
+ -vf scale=1920:-1  // ширината става 1920
+ -vf scale=-1:1080  // височината 1080 (ширината според пропрорцията)
+ -filter_complex "scale=iw*min(1\,min(640/iw\,360/ih)):-1" // размера не повече от 640 на 360
+
+Отрязване на картинка: (x264)
+ (left top right down)
+ x264 in.mp4 -o out.mp4 --level 4.1 --profile high --seek 300 --frames 200 --vf crop:12,0,12,4
+ 
+Отрязване на картинка: (ffmpeg) 
+ ffmpeg ?
+ 
+Всичко (мащабиране, слагане на лого, кодиране): (ffmpeg)
+ ffmpeg -i IN.MP4 -i LOGO.png -c:a copy -c:v libx264 -preset slow -profile:v high -level 4.0 -filter_complex overlay -vf scale=-1:480 OUT.mp4
+
+ по сентъра вертикално и хоризонтално
+ ... -filter_complex overlay="(main_w/2)-(overlay_w/2):(main_h/2)-(overlay_h)/2"
+ 
+Анимирано лого (горен ляв ъгъл):
+ ffmpeg -i IN.mp4 -loop 1 -r 5 -i logo/%d.png -c:a copy -c:v libx264 -preset slow -profile:v high -level 4.0 -filter_complex overlay -shortest OUT.mp4
+ 
+ -r         fps на логото
+ -loop 1    да се повтарят картинките от които е направен логотипа
+ -shortest  завършване на кодиране, когато най късия файл свърши (т.е. самото видео, т.к. логото е безкрайно)
+ 
+Изместено лого (слага се на 10px от долния край и на 10px от десния):
+ (идеята е че като пиша overlay пиша къде се намира горния ляв ъгъл на логото)
+ ffmpeg -i IN.mp4 -loop 1 -i "logo/%d.png" -c:a copy -c:v libx264 -preset slow -profile:v high -level 4.2 -filter_complex overlay=main_w-overlay_w-10:main_h-overlay_h-10 -shortest -t 20 OUT.mp4
+ 
+ main_w    - ширина на основното видео
+ overlay_w - ширина на логото
+ ...
+
+DVD Вписване на видео в определен размер на кадър (това трябва само за dvd):
+ http://ffmpeg.org/pipermail/ffmpeg-user/2011-June/001257.html
+ Филтъра прави видеото 720 * 576: (това го копирах и то просто работи)
+ -vf scale='gte(iw/ih\,720/576)*720+lt(iw/ih\,720/576)*((576*iw)/ih):lte(iw/ih\,720/576)*576+gt(iw/ih\,720/576)*((720*ih)/iw)',pad='720:576:(720-gte(iw/ih\,720/576)*720-lt(iw/ih\,720/576)*((576*iw)/ih))/2:(576-lte(iw/ih\,720/576)*576-gt(iw/ih\,720/576)*((720*ih)/iw))/2:black' 
+ -vf scale='gte(iw/ih\,720/576)*720+lt(iw/ih\,720/576)*((576*iw)/ih):lte(iw/ih\,720/576)*576+gt(iw/ih\,720/576)*((720*ih)/iw)',pad='720:576:(720-gte(iw/ih\,720/576)*720-lt(iw/ih\,720/576)*((576*iw)/ih))/2:(576-lte(iw/ih\,720/576)*576-gt(iw/ih\,720/576)*((720*ih)/iw))/2:black' 
+
+Създаване на dvd 16:9 (ако оригинала не е нужен формат, то той ще бъде распънат с този размер): 
+ ffmpeg -i in.mp4 -target pal-dvd -aspect 16:9 out.mpg
+
+Създаване на dvd 4:3 (със добавяне на черни линии ако видеото е по широко от 4:3):
+ ffmpeg -i in.mp4 -target pal-dvd -aspect 4:3 -vf pad="iw:iw*3/4:0:(oh-ih)/2" out.mpg
+
+Създаване на dvd 16:9 (със добавяне на черни линии ако видеото е по широко от 16:9):
+ ffmpeg -i in.mp4 -target pal-dvd -aspect 16:9 -vf pad="iw:iw*9/16:0:(oh-ih)/2" out.mpg
+
+И след това
+ dvdauthor -o dvd_folder/ -t out.mpg
+
+Цял пример за правене на DVD:
+ ffmpeg -i in.mp4 -target pal-dvd -aspect 16:9 out.mpg && dvdauthor -o dvd/ -t out.mpg
+ 
+За тати: диска трябва се финализира, макс размер 720*576 или 720*480
+ SVCD
+ ffmpeg -i in.avi -target ntsc-svcd out.mpg 
+ ffmpeg -i in.avi -target pal-svcd  out.mpg
+ DIVX (максималния размер на кадър е pal или ntfs кадър, тука трябва се смени -s на друго
+ ffmpeg -i in.avi -s 320x240 -vcodec msmpeg4v2 video_finale.avi
+ WMV
+
+DVD to MPG
+ ffmpeg -i in.VOB -c:v copy -c:a copy -f dvd out.MPG
+ ffmpeg -i "concat:$(echo VT*.VOB|tr \  \|)" -f mpeg -c copy -sn combined.mpg
+
+DVD доп настройки
+ -qscale 2 - почти максимално качество (1-31)
+ -trellis  - не знам какво е
+ 
+ ffmpeg -i in.mov -target pal-dvd -qscale 2 -trellis 2 out.mpg
+
+някъде пишат -b:v 8000k
+ ffmpeg -i in.mp4 -f dvd -target pal-dvd -b:v 8000k -r 25 -vf scale=720:576 -ar 48000 -b:a 224k out.mpg
+но в следващия коментарий, друг казва че има проблеми и стигнал до това решение
+ ffmpeg -threads 4 -i in.mp4 -f dvd -c:v mpeg2video -b:v 5000k -bt:v 4000k -r:v 25 -vf scale=720:576 -aspect:v 16:9 -c:a ac3 -b:a 224k -ar:a 48000 out.mpg 
+
+за наистина извратени хора: (как изцяло се прави dvd в linux)
+https://womble.decadent.org.uk/talks/dvd-ukuug06/dvd-talk-ukuug06-paper.html 
+ 
+ 
+Видео без загуба
+ -vcodec png video.avi
+ а има и възможност картинките пред codec copy да ги събереш в .mkv
+ -vcodec huffyuv
+ -vcodec ffv1
+ -c:v libx264 -preset ultrafast -qp 0  // fast
+ -c:v libx264 -preset veryslow -qp 0   // best compression
+
+Със загуба 
+ -vcodec mjpeg
+ -vcodec libx264 -sameq
+
+Четене на yuv
+  ffmpeg -f rawvideo -vcodec rawvideo -s 1920x1080 -r 25 -pix_fmt yuv420p -i inputfile.yuv -c:v libx264 -preset ultrafast -qp 0 output.mp4 
+
+Pipe на Windows !!!
+  пайп, който нормално показва има звук и всичко е наред, това може да стане за проверка на настройките за кодиране
+  всичко работи от родъ на звук, размер на видео и даже превъртане (само напред)
+    ffmpeg -i in.mp4 -codec copy -f matroska - | ffplay -
+
+  няма значение какъв е истинския размер на видеото, става упаковане в контейнер и затова не трябва си играеш с ffplay:
+    ffmpeg -r 10 -i "IMG_%04d.tif" -pix_fmt yuv420p -vcodec rawvideo -f matroska -vf scale=1280:720 - | ffplay -
+
+Pipe и получаване на raw (yuv) видео
+  правилно напиши размера на видеото!
+    ffmpeg -i in.mp4 -pix_fmt yuv420p -f rawvideo - | ffplay -f rawvideo -pix_fmt yuv420p -s 720x480 -
+
+	няма значение какъв е истинския размер на видеото:
+    ffmpeg -i in.mk4 -pix_fmt yuv420p -f rawvideo -vf scale=720:480 - | ffplay -f rawvideo -pix_fmt yuv420p -s 720x480 -
+
+Pipe ffmpeg ffmpeg	
+  (свърши работа като ми трябваше много филтри подред да използвам)
+  ffmpeg -i in.mp4 -vcodec rawvideo -f matroska - | ffmpeg -i - -c:v libx264 -preset slow -level 4.1 out.mkv
+
+  
+Неща близки до кодиране без загуба ама не са ми ясни:
+http://forum.videohelp.com/threads/277807-Useful-FFmpeg-Syntax-Examples
+ H.264 I-frame only Highest Quality Encoding
+  ffmpeg -i <input_file> -vcodec h264 -cqp 1 -intra -coder ac -an output.mp4
+ 
+ H.264 Long GOP Encoding
+  ffmpeg -i <input_file> -vcodec h264 -b <video_bitrate> -g <gop_size> -bf 2 -b_strategy 1 -flags +loop -coder 1 -subcmp 2 -cmp 2 -trellis 2 -me hex -acodec aac -ab <audio_bitrate> output.mp4
+ MPEG-2 I-frame only Highest Quality Encoding
+  ffmpeg -i <input_file> -vcodec mpeg2video -qscale 1 -qmin 1 -intra -an output.m2v
+ MPEG-2 Long GOP Encoding
+  ffmpeg -i <input_file> -vcodec mpeg2video -b <video_bitrate> -g <gop_size> -bf 2 -b_strategy 1 -acodec mp2 -ab <audio_bitrate> -f vob output.mpg
+  
+При грешка "Can't write packet with unknown timestamp" Add -fflags +genpts before the input file.
+ Ex: ffmpeg -fflags +genpts -i in.vob -c:v copy -c:a copy -c:s copy -map 0 mymovie.mkv
+
+Аудио:
+ wav to stdout
+ ffmpeg -i IN.mkv -vn -acodec pcm_s16le -ac 2 -ar 48000 -f wav -
+
+ ffmpeg -i out.wav -c libmp3lame   p.mp3
+ ffmpeg -i out.wav -c libvo_aacenc p.m4a
+ 
+ to generate a 1000 Hz signal for 5 seconds duration:
+ ffmpeg -f lavfi -i "sine=frequency=1000:duration=5" test.wav
+ ffmpeg -f lavfi -i "sine=frequency=1000:duration=5" -c:a pcm_s16le test.wav
+ ffmpeg -f lavfi -i "sine=frequency=1000:sample_rate=48000:duration=5" -c:a pcm_s16le test.wav
+ 
+NeroAAC 
+Quality | Bitrate (kbit/s)
+   0.05 | 16
+   0.15 | 33
+   0.25 | 66
+   0.35 | 100
+   0.45 | 146
+   0.55 | 192
+   0.65 | 238
+   0.75 | 285
+   0.85 | 332
+   0.95 | 381
+ По подразбиране е 0.5 и това казват че е добро качество.
+ Като че ли кодера сам определя в зависимост от избраното качество / битрейт дали да включва he, he2 но може
+ и принудително: -lc, -he, -he2 това май действително няма смисъл!
+ Избрах q = 0.65 просто за да е малко по високо от средното, но май наистина в това няма смисъл
+
+ проверено че работи с [pcm_s16le, pcm_s24le, pcm_s32le] и с 2 или 6 канала
+ ffmpeg -i IN.mkv -vn -acodec pcm_s16le -ac 2 -ar 48000 -f wav - | neroAacEnc -if - -q 0.65 -ignorelength -of out.mp4
+ ffmpeg -i IN.mkv -vn -acodec pcm_s32le -ac 6 -ar 48000 -f wav - | neroAacEnc -if - -q 0.65 -ignorelength -of out.mp4
+
+Последен вариант (избирам правилния звуков канал и правя така че да не си пречат исходните потоци)
+ ffmpeg -loglevel panic -i IN.mkv -vn -map 0:2 -acodec pcm_s24le -ac 6 -ar 48000 -f wav - | neroAacEnc -if - -q 0.65 -ignorelength -of out.aac
+
+ffmpeg aac-he2
+ ffmpeg -i test.ac3 \
+        -c:a libfdk_aac -profile:a aac_he_v2 \
+        -b:a 32k -movflags +faststart \
+        output.m4a
+
+Merge, concat, склейка, обединяване
+ ffmpeg -i concat:"in1.avi|in2.avi" -c copy out.avi
+ ffmpeg -i p1.wav -i p2.wav -filter_complex '[0:0][1:0]concat=n=2:v=0:a=1[out]' -map '[out]' out.wav
+ 
+ ffmpeg -i input1.wav -i input2.wav -i input3.wav -i input4.wav \
+-filter_complex '[0:0][1:0][2:0][3:0]concat=n=4:v=0:a=1[out]' \
+-map '[out]' output.wav
+ 
+ n - числото на файлове за обединяване
+
+ Най удобния начин !!! (долу)
+ 
+ ffmpeg -f concat -i list.txt -c copy out.mkv
+ где
+ list.txt:
+  # comment
+  file '100_%04d.tif'
+  file '101_%04d.tif'
+  file /path/to/file1
+  file /path/to/file2
+
+$ ffmpeg -i concat:"vts_01_1.vob|vts_01_2.vob|vts_01_3.vob|vts_01_4.vob" -с copy out.vob
+или
+$ ffmpeg -i concat:"vts_01_1.vob\|vts_01_2.vob\|vts_01_3.vob\|vts_01_4.vob" -с copy out.vob
+
+на Linux:
+  ffmpeg -i "concat:$(echo *.VOB|tr \  \|)" -f mpeg -c copy -sn -y combined.mpg
+
+ Не работи:
+ $ ffmpeg -f concat -i p1.wav -i p2.wav out.mp3
+
+Cрязва по най-краткия поток (махане на излишен звук):
+$ ffmpeg -i "video" -i "audio" -shortest -map 0 -map 1 -c:v copy -c:a copy out.mkv
+
+от началото и дълго 2 мин 40 сек
+$ ffmpeg -i IN.wav -t 00:02:40 p1.wav
+пропускам първите 3 мин 27 сек и до края
+$ ffmpeg -i IN.wav -ss 00:03:27 p2.wav
+
+
+
+Подписване на всеки кадър
+
+ ffmpeg -i in.mkv -vf "drawtext=fontfile=Arial.ttf: text=%{n}: x=(w-tw)/2: y=h-(2*lh): fontcolor=white: box=1: boxcolor=0x00000099" -c:v libx264 -preset medium -level 4.1 out.mkv
+
+По сложен вариант
+
+  for i in *.png; do 
+      time = $(echo $i | cut -d . -f 1)
+      ffmpeg -i $i -vf "drawtext=text=$time" mod-$time.png
+  done
+
+
+
+
+
+
+Команди които никога повече не ми се ще да ги пиша: ---------------------------
+
+cmd:(без значение от къде)
+
+"C:\Program Files (x86)\K-Lite Codec Pack\Media Player Classic\mpc-hc.exe" "file name.avi" - play
+
+x264.exe --preset placebo --tune psnr -o out.mp4 in.mp4
+
+// 5.94 fps, 262MB -> 53.4MB (!) без да се измени качеството, като на магия..
+// 1.15 fps(повечето време) написа 1.37 fps, 879MB -> 449MB (DiVX Plus 530MB и доста по бързо)
+// 0.66 fps, 131MB -> 81.9MB, (1900x1080) 3238 kb/s
+
+Сравнение на файли in.mp4 и out.mp4:
+
+name.avs
+stackvertical(avisource("in.avi"), avisource("out.avi")) # ясно какво става
+
+или
+name.avs
+stackvertical(DirectShowSource("in.mp4"), DirectShowSource("in.mp4")) 
+
+virtualdub -> open name.asv
+
+
+# Crop(0,0,300,0) # обрежем справа
+
+AddBorders(8,0,8,0)  # Добавим справа и слева по 8 черного
+Crop(0,0,0,-16)      # Обрежем снизу, например, 16 мусора
+Addborders(0,0,0,16) # И добавим снизу 16 черного 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Get information about a media file:
+ ffmpeg -i video.avi
+
+Extract (demux) the audio track from a video file:
+ ffmpeg -i video.mts -acodec copy -vn audio.ac3
+
+Extract (demux) the video track from a video file:
+ ffmpeg -i video.mts -vcodec copy -an -f h264 ffNT.h264
+
+Merge an audio and a video track (mux):  По добре с mp4box с това нещо не се отваря файла
+ ffmpeg -i video.h264 -i audio.ac3 -vcodec copy -acodec copy out.mkv
+ ffmpeg -i video.* -i audio1.* -i audio2.* -map 0 -map 1 -map 2 -codec copy out.mkv
+
+Resize video file from a camcorder down to DVD resolution (and MPEG) for further processing, e.g. burning on DVD (e.g. with DVDStyler), but keep the source aspect ratio of 16:9:
+ ffmpeg -i video.ts -s 720x405 -aspect "1.7777" -vb 8000k video.mpg
+   
+Crop 3446 seconds from start of concats files (get 3446 remove after)
+ ffmpeg -t 3446 -i inputfile.vob -acodec copy -vn outputfile.ac3
+
+Remove first 30 seconds (keep remainder) 
+ ffmpeg -ss 30 -acodec copy -i inputfile.mp3 outputfile.mp3 
+ 
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+DVD
+
+Парчета се събират в един файл
+ ffmpeg -i concat:"G:\VIDEO_TS\vts_01_1.vob|G:\VIDEO_TS\vts_01_2.vob|G:\VIDEO_TS\vts_01_3.vob|G:\VIDEO_TS\vts_01_4.vob|G:\VIDEO_TS\vts_01_5.vob" -c copy concat.vob
+
+Звук (сам избра нужен битрейт в 192)
+ ffmpeg -i concat.vob audio.ac3 -acodec ac3
+  или (копие на звука)
+   ffmpeg -i concat.vob -acodec copy -vn audio.ac3
+ 
+Кодираш
+ 4:3
+ x264 concat.vob -o convert.mp4 --level 4.1 --profile high --vf crop:12,0,12,4
+ 9:16
+ x264 concat.vob -o convert.mp4 --level 4.1 --profile high --vf crop:12,40,12,44
+
+Събираш 
+ mp4box -add audio.ac3 -add convert.mp4 out.mp4
+ 
+А след всичко това, ако трябва режеш на парчета
+
+% - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+Подробно за избор на каналите
+ ffmpeg.org/trac/ffmpeg/wiki/How%20to%20use%20-map%20option
+
+To create a large video file from multiple video files, one does not simply cat into Mordor, because of different header information or stream mappings in the files. But one can use ffmpeg to do that job.
+
+Let’s say you have authored a DVD with one video stream, eight subtitles and two audio streams and you want to create a single vob file with video, the first two subtitles and both audio streams for further transcoding. To concatenate the files, enter the keyword concat before the first input file and then separate the files by a pipe.
+
+ $ ffmpeg -i concat:"vts_01_1.vob|vts_01_2.vob|vts_01_3.vob|vts_01_4.vob"
+
+ffmpeg will now analyse the files and tell you which streams have which index. To make a copy of the input files without transcoding, use the -c copy option. This tells ffmpeg to pass through all streams. You can copy multiple streams into the output file with the -map x:y option, where x is the input file index and y the stream index in that file, both starting with 0. The video stream will most likely have the index 0. Let’s say you found out with the first command that the subtitle streams you want are index 1 and 2 and the audio streams are 9 and 10. The command to enter is 
+
+ $ ffmpeg -i concat:"vts_01_1.vob|vts_01_2.vob|vts_01_3.vob|vts_01_4.vob" -c copy -map 0:0 -map 0:1 -map 0:2 -map 0:9 -map 0:10 concat.vob
+
+If you have the video and audio streams in different files and want to create a single video file containing both streams, ffmpeg is also the tool of your choice. For this example, let’s assume the file videoWithAudio1.mp4 contains a video and an audio stream, while the files audio2.m4a and audio3.m4a only contain a single audio stream. Again we use the -c copy option for passing through the streams and the -map x:y option for stream selection. 
+
+ $ ffmpeg -i videoWithAudio1.mp4 -i audio2.m4a -i audio3.m4a -c copy -map 0:0 -map 0:1 -map 1:0 -map 2:0 muxed.mp4
+
+As you can see, the file videoWithAudio1.mp4 has index 0, audio2.m4a index 1 and audio3.m4a index 2, so the mapping is very straight forward.

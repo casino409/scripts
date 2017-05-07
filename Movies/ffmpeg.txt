@@ -1,0 +1,5 @@
+# https://trac.ffmpeg.org/wiki/Seeking
+
+# fast seek by keyframe, cut part from 28:31 to 29:00 (29 second)
+
+ffmpeg -ss 00:28:31 -i IN.mkv -to 00:29:00 -c copy -copyts -avoid_negative_ts 1 OUT.mkv
